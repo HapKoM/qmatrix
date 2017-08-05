@@ -1,0 +1,2 @@
+# qmatrix
+Strassen algorithm implementation
