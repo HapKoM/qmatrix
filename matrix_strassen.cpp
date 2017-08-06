@@ -30,7 +30,7 @@ Matrix::Matrix(std::initializer_list<std::initializer_list<int8_t> > data)
       data_[row_ctr] = new int8_t[(*it).size()];
       size_t col_ctr = 0;
       for (auto it1 = (*it).begin(); it1 != (*it).end(); ++it1) {
-        data_[row_ctr][col_ctr] = *it1;
+        data_[row_ctr][col_ctr] = *it1 & mask;
         col_ctr++;
       }
       row_ctr++;
@@ -255,7 +255,7 @@ Matrix Matrix::multiply_trivial(const Matrix& lhs, const Matrix& rhs) {
       for (size_t k = 0; k < lhs.col_; ++k) {
         sum += lhs.data_[i][k] * rhs.data_[k][j];
       }
-      m.data_[i][j] = sum;
+      m.data_[i][j] = sum & mask;
     }
   }
   return m;

@@ -8,7 +8,7 @@
 class Matrix {
 public:
   //! Mask that applied to mathematical operations on the matrix elements
-  static const int8_t mask = static_cast<int8_t>(0xFF);
+  static const int8_t mask = static_cast<int8_t>(0x03);
   /**
    * Creates Matrix object and fills it with provided data:
    * Matrix m({ {1, 2, 3}, {4, 5, 6} });
