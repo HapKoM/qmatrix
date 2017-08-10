@@ -2,6 +2,7 @@ CXX=g++
 CXXFLAGS=-O0
 CXXFLAGS+=-Wall -Wpedantic -Weffc++ -Warray-bounds -std=c++11 -g -pthread
 CXXFLAGS+=-DPARALLEL_STRASSEN
+CXXFLAGS+=-DTEST_MODE
 LDFLAGS=-lgtest
 
 TARGET=qmatrix_test

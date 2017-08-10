@@ -3,6 +3,7 @@ CXXFLAGS=-O3
 CXXFLAGS+=-Wall -Wpedantic -Weffc++ -Warray-bounds -std=c++11 -g -pthread
 #CXXFLAGS+=-DTRIVIAL_ALGORITHM
 CXXFLAGS+=-DPARALLEL_STRASSEN
+#CXXFLAGS+=-DTEST_MODE
 CXXFLAGS+=-ftree-vectorize -msse2 -ftree-vectorizer-verbose=5
 
 TARGET=qmatrix

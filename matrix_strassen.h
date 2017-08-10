@@ -7,8 +7,6 @@
 
 class Matrix {
 public:
-  //! Mask that applied to mathematical operations on the matrix elements
-  static const int8_t mask = static_cast<int8_t>(0x03);
   /**
    * Creates Matrix object and fills it with provided data:
    * Matrix m({ {1, 2, 3}, {4, 5, 6} });
@@ -45,22 +43,46 @@ public:
   //! Zeroize data
   void clear();
   void dump_size() const;
+  void dump_raw_bytes() const;
   void dump() const;
   /**
    * Get element in i-th row and j-th column
-   * i should be [0..row), j should be [0..col), otherwise std::length_error is thrown
+   * i should be [0..row), j should be [0..col)
    */
-  char get(size_t i, size_t j) const;
+  inline int8_t get(size_t i, size_t j) const {
+    size_t n_byte = j / 4;
+    size_t shift = (j % 4) * 2;
+    return (data_[i][n_byte] >> shift) & 0x03;
+  }
+
   /**
    * Set element in i-th row and j-th column
-   * i should be [0..row), j should be [0..col), otherwise std::length_error is thrown
+   * i should be [0..row), j should be [0..col)
    */
-  void set(size_t i, size_t j, int8_t value);
+  inline void set(size_t i, size_t j, int8_t value) {
+    size_t n_byte = j / 4;
+    size_t shift = (j % 4) * 2;
+    int8_t old_byte = data_[i][n_byte];
+    int8_t mask = ~(0x03 << shift);
+    value = (value & 0x03) << shift;
+    data_[i][n_byte] = (old_byte & mask) | value;
+  }
+
   size_t row() const;
   size_t col() const;
   Matrix transposed() const;
   static Matrix multiply_trivial(const Matrix& lhs, const Matrix& rhs);
   static Matrix multiply_strassen(const Matrix& lhs, const Matrix& rhs);
+#ifdef TEST_MODE
+  /*
+   * For the tesing this functions declared as static methods.
+   * When testing is disabled this methods defined as inline functions
+   * and visible only inside matrix_strassen.cpp file
+   */
+  static int8_t packed_sum(int8_t a, int8_t b);
+  static int8_t packed_diff(int8_t a, int8_t b);
+  static int8_t packed_multiply(int8_t a, int8_t b);
+#endif
 private:
   static Matrix calculate_p1(const Matrix& a11, const Matrix& a22, const Matrix& b11, const Matrix& b22);
   static Matrix calculate_p2(const Matrix& a21, const Matrix& a22, const Matrix& b11);

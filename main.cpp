@@ -41,9 +41,10 @@ int main(int argc, char** argv) {
       Matrix c = a*b;
       std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
       sum += std::chrono::duration_cast<std::chrono::microseconds> (end - start);
+      std::cout << "\rSize [" << m  << "; " << m << "]: " << ctr << "/" << count << std::flush;
     }
     double multiplication_time_ms = static_cast<double>(sum.count()) / (count * 1000);
-    std::cout << "M = " << m << ": time = " << multiplication_time_ms << std::endl;
+    std::cout << "\rSize [" << m  << "; " << m << "]: time = " << multiplication_time_ms << " ms."<< std::endl;
   }
   return 0;
 }

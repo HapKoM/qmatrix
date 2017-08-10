@@ -12,6 +12,52 @@
 #define STRASSEN_MATRIX_SIZE 64
 #endif
 
+inline size_t packed_bytes_size(size_t col) {
+  size_t n_bytes = col / 4;
+  if (col % 4)
+    n_bytes++;
+  return n_bytes;
+}
+
+#ifndef TEST_MODE
+inline int8_t packed_sum(int8_t a, int8_t b)
+#else
+int8_t Matrix::packed_sum(int8_t a, int8_t b)
+#endif
+{
+  int8_t v0 = (a + b) & 0x03;
+  int8_t v1 = (((a >> 2) + (b >> 2)) & 0x03) << 2;
+  int8_t v2 = (((a >> 4) + (b >> 4)) & 0x03) << 4;
+  int8_t v3 = (((a >> 6) + (b >> 6)) & 0x03) << 6;
+  return v3 | v2 | v1 | v0;
+}
+
+#ifndef TEST_MODE
+inline int8_t packed_diff(int8_t a, int8_t b)
+#else
+int8_t Matrix::packed_diff(int8_t a, int8_t b)
+#endif
+{
+  int8_t v0 = (a - b) & 0x03;
+  int8_t v1 = (((a >> 2) - (b >> 2)) & 0x03) << 2;
+  int8_t v2 = (((a >> 4) - (b >> 4)) & 0x03) << 4;
+  int8_t v3 = (((a >> 6) - (b >> 6)) & 0x03) << 6;
+  return v3 | v2 | v1 | v0;
+}
+
+#ifndef TEST_MODE
+inline int8_t packed_multiply(int8_t a, int8_t b)
+#else
+int8_t Matrix::packed_multiply(int8_t a, int8_t b)
+#endif
+{
+  int8_t v0 = (a*b) & 0x03;
+  int8_t v1 = (((a >> 2) * (b >> 2)) & 0x03) << 2;
+  int8_t v2 = (((a >> 4) * (b >> 4)) & 0x03) << 4;
+  int8_t v3 = (((a >> 6) * (b >> 6)) & 0x03) << 6;
+  return v3 | v2 | v1 | v0;
+}
+
 Matrix::Matrix(std::initializer_list<std::initializer_list<int8_t> > data)
        :row_(data.size()), col_(0), data_(nullptr) {
   if (row_ > 0) {
@@ -27,10 +73,12 @@ Matrix::Matrix(std::initializer_list<std::initializer_list<int8_t> > data)
     }
     data_ = new int8_t*[row_];
     for (auto it = data.begin(); it != data.end(); ++it) {
-      data_[row_ctr] = new int8_t[(*it).size()];
+      size_t packed_size = packed_bytes_size((*it).size());
+      data_[row_ctr] = new int8_t[packed_size];
+      memset(data_[row_ctr], 0, packed_size);
       size_t col_ctr = 0;
       for (auto it1 = (*it).begin(); it1 != (*it).end(); ++it1) {
-        data_[row_ctr][col_ctr] = *it1 & mask;
+        set(row_ctr, col_ctr, *it1);
         col_ctr++;
       }
       row_ctr++;
@@ -42,7 +90,9 @@ Matrix::Matrix(size_t row, size_t col)
                      :row_(row), col_(col), data_(nullptr) {
   data_ = new int8_t*[row_];
   for (size_t i = 0; i < row_; ++i) {
-    data_[i] = new int8_t[col_];
+    size_t packed_size = packed_bytes_size(col_);
+    data_[i] = new int8_t[packed_size];
+    memset(data_[i], 0, packed_size);
   }
   clear();
 }
@@ -51,11 +101,13 @@ Matrix::Matrix(const Matrix& other)
                      :row_(other.row_), col_(other.col_), data_(nullptr) {
   data_ = new int8_t*[row_];
   for (size_t i = 0; i < row_; ++i) {
-    data_[i] = new int8_t[col_];
+    size_t packed_size = packed_bytes_size(col_);
+    data_[i] = new int8_t[packed_size];
+    memset(data_[i], 0, packed_size);
   }
   clear();
   for (size_t i = 0; i < row_; ++i) {
-    memcpy(data_[i], other.data_[i], col_);
+    memcpy(data_[i], other.data_[i], packed_bytes_size(col_));
   }
 }
 
@@ -76,7 +128,7 @@ Matrix& Matrix::operator=(const Matrix& rhs) {
   row_ = rhs.row_;
   col_ = rhs.col_;
   for (size_t i = 0; i < row_; ++i) {
-    memcpy(data_[i], rhs.data_[i], col_);
+    memcpy(data_[i], rhs.data_[i], packed_bytes_size(col_));
   }
   return *this;
 }
@@ -87,8 +139,10 @@ bool Matrix::operator==(const Matrix& rhs) const {
   if ((row_ != rhs.row_) || (col_ != rhs.col_))
     return false;
   for (size_t i = 0; i < row_; ++i) {
-     if (memcmp(data_[i], rhs.data_[i], col_) != 0)
+    size_t packed_size = packed_bytes_size(col_);
+    if (memcmp(data_[i], rhs.data_[i], packed_size) != 0) {
       return false;
+    }
   }
   return true;
 }
@@ -127,8 +181,9 @@ Matrix Matrix::operator+(const Matrix& rhs) const {
   }
   Matrix m(row_, col_);
   for (size_t i = 0; i < row_; ++i) {
-    for (size_t j = 0; j < col_; ++j) {
-      m.data_[i][j] = (data_[i][j] + rhs.data_[i][j]) & mask;
+    size_t n_bytes = packed_bytes_size(col_);
+    for (size_t j = 0; j < n_bytes; ++j) {
+      m.data_[i][j] = packed_sum(data_[i][j], rhs.data_[i][j]);
     }
   }
   return m;
@@ -143,8 +198,9 @@ Matrix Matrix::operator-(const Matrix& rhs) const {
   }
   Matrix m(this->row(), this->col());
   for (size_t i = 0; i < row_; ++i) {
-    for (size_t j = 0; j < col_; ++j) {
-      m.data_[i][j] = (data_[i][j] - rhs.data_[i][j]) & mask;
+    size_t n_bytes = packed_bytes_size(col_);
+    for (size_t j = 0; j < n_bytes; ++j) {
+      m.data_[i][j] = packed_diff(data_[i][j], rhs.data_[i][j]);
     }
   }
   return m;
@@ -157,16 +213,18 @@ void Matrix::resize(size_t row, size_t col) {
   row_ = row;
   int8_t** new_data = new int8_t*[row_];
   for (size_t i = 0; i < col_; ++i) {
-    new_data[i] = new int8_t[col_];
-    memset(new_data[i], 0, col_);
+    new_data[i] = new int8_t[packed_bytes_size(col_)];
+    memset(new_data[i], 0, packed_bytes_size(col_));
     if (i < old_row) {
-      if (old_col < col_) {
-        // Increase old matrix, just copy old data to new
-        memcpy(new_data[i], data_[i], old_col);
-      } else {
-        // Decrease old matrix, truncate old data to new size
-        memcpy(new_data[i], data_[i], col_);
-      }
+      size_t sz = std::min(old_col, col_);
+      size_t packed_sz = packed_bytes_size(sz);
+      memcpy(new_data[i], data_[i], packed_sz);
+      // If column size is not multiple of 4, we need to zeroize
+      // 2, 4 or 6 most significant bits in the last byte of current row
+      // Number of bits to be zeroized depends on column size modulo 4
+      int8_t shift = sz % 4;
+      int8_t mask = 0xFF >> shift*2;
+      new_data[i][packed_sz - 1] &= mask;
     }
   }
   for (size_t i = 0; i < old_row; ++i) {
@@ -178,7 +236,7 @@ void Matrix::resize(size_t row, size_t col) {
 
 void Matrix::clear() {
   for (size_t i = 0; i < row_; ++i) {
-    memset(data_[i], 0, col_);
+    memset(data_[i], 0, packed_bytes_size(col_));
   }
 }
 
@@ -186,41 +244,26 @@ void Matrix::dump_size() const {
   std::cout << "[" << row_ << " x " << col_ << "]" << std::endl;
 }
 
-void Matrix::dump() const {
+void Matrix::dump_raw_bytes() const {
   for (size_t i = 0; i < row_; ++i) {
-    for (size_t j = 0; j < col_; ++j) {
-      std::cout << static_cast<int>(data_[i][j]) << " ";
+    size_t n_bytes = packed_bytes_size(col_);
+    for (size_t j = 0; j < n_bytes; ++j) {
+      printf("%02X ", data_[i][j]);
     }
     std::cout << std::endl;
   }
 }
 
-char Matrix::get(size_t i, size_t j) const {
-  if (i >= row_) {
-    std::stringstream msg;
-    msg << "Matrix::at(): Row number = " << i << "; should be less than " << row_;
-    throw std::length_error(msg.str());
+void Matrix::dump() const {
+  std::cout << "[";
+  for (size_t i = 0; i < row_; ++i) {
+    for (size_t j = 0; j < col_; ++j) {
+      std::cout << static_cast<int>(get(i, j)) << " ";
+    }
+    if (i != row_ - 1)
+      std::cout << "; ";
   }
-  if (j >= col_) {
-    std::stringstream msg;
-    msg << "Matrix::at(): Column number = " << j << "; should be less than " << col_;
-    throw std::length_error(msg.str());
-  }
-  return data_[i][j];
-}
-
-void Matrix::set(size_t i, size_t j, int8_t value) {
-  if (i >= row_) {
-    std::stringstream msg;
-    msg << "Matrix::at(): Row number = " << i << "; should be less than " << row_;
-    throw std::length_error(msg.str());
-  }
-  if (j >= col_) {
-    std::stringstream msg;
-    msg << "Matrix::at(): Column number = " << j << "; should be less than " << col_;
-    throw std::length_error(msg.str());
-  }
-  data_[i][j] = value & mask;
+  std::cout << "];" << std::endl;
 }
 
 size_t Matrix::row() const {
@@ -235,7 +278,7 @@ Matrix Matrix::transposed() const {
   Matrix m(col_, row_);
   for (size_t i = 0; i < row_; ++i) {
     for (size_t j = 0; j < col_; ++j) {
-      m.data_[j][i] = data_[i][j];
+      m.set(j, i, get(i, j));
     }
   }
   return m;
@@ -248,14 +291,19 @@ Matrix Matrix::multiply_trivial(const Matrix& lhs, const Matrix& rhs) {
         << lhs.col_ << " and " << rhs.row_ << " provided)";
     throw std::length_error(msg.str());
   }
+
   Matrix m(lhs.row_, rhs.col_);
+  Matrix rhs_tr(rhs.transposed());
+  size_t l_bytes = packed_bytes_size(lhs.col_);
   for (size_t i = 0; i < lhs.row_; ++i) {
-    for (size_t j = 0; j < rhs.col_; ++j) {
+    for (size_t j = 0; j < rhs_tr.row_; ++j) {
       int8_t sum = 0;
-      for (size_t k = 0; k < lhs.col_; ++k) {
-        sum += lhs.data_[i][k] * rhs.data_[k][j];
+      for (size_t k = 0; k < l_bytes; ++k) {
+        int8_t prod = packed_multiply(lhs.data_[i][k], rhs_tr.data_[j][k]);
+        sum = packed_sum(sum, prod);
       }
-      m.data_[i][j] = sum & mask;
+      int8_t sum_pack = ((sum & 0x03) + ((sum >> 2) & 0x03) + ((sum >> 4) & 0x03) + ((sum >> 6) & 0x03)) & 0x03;
+      m.set(i, j, sum_pack);
     }
   }
   return m;
@@ -309,6 +357,7 @@ Matrix Matrix::multiply_strassen(const Matrix& lhs, const Matrix& rhs) {
   a.resize(power, power);
   b.resize(power, power);
   size_t half_size = power / 2;
+  //size_t packed_size = packed_bytes_size(half_size);
   // Initialize and fill quarters of matrices
   Matrix a_1_1(half_size, half_size);
   Matrix a_1_2(half_size, half_size);
@@ -319,14 +368,16 @@ Matrix Matrix::multiply_strassen(const Matrix& lhs, const Matrix& rhs) {
   Matrix b_2_1(half_size, half_size);
   Matrix b_2_2(half_size, half_size);
   for (size_t i = 0; i < half_size; ++i) {
-    memcpy(a_1_1.data_[i], a.data_[i], half_size);
-    memcpy(a_1_2.data_[i], a.data_[i] + half_size, half_size);
-    memcpy(a_2_1.data_[i], a.data_[i + half_size], half_size);
-    memcpy(a_2_2.data_[i], a.data_[i + half_size] + half_size, half_size);
-    memcpy(b_1_1.data_[i], b.data_[i], half_size);
-    memcpy(b_1_2.data_[i], b.data_[i] + half_size, half_size);
-    memcpy(b_2_1.data_[i], b.data_[i + half_size], half_size);
-    memcpy(b_2_2.data_[i], b.data_[i + half_size] + half_size, half_size);
+    for (size_t j = 0; j < half_size; ++j) {
+      a_1_1.set(i, j, a.get(i, j));
+      a_1_2.set(i, j, a.get(i, j + half_size));
+      a_2_1.set(i, j, a.get(i + half_size, j));
+      a_2_2.set(i, j, a.get(i + half_size, j + half_size));
+      b_1_1.set(i, j, b.get(i, j));
+      b_1_2.set(i, j, b.get(i, j + half_size));
+      b_2_1.set(i, j, b.get(i + half_size, j));
+      b_2_2.set(i, j, b.get(i + half_size, j + half_size));
+    }
   }
 #ifdef PARALLEL_STRASSEN
 #pragma message "parellelized Strassen algorithm implementation"
@@ -370,14 +421,15 @@ Matrix Matrix::multiply_strassen(const Matrix& lhs, const Matrix& rhs) {
   Matrix c_2_2(p_1 - p_2 + p_3 + p_6);
 
   Matrix c(power, power);
-  for (size_t i = 0; i < half_size; ++i)
-    memcpy(c.data_[i], c_1_1.data_[i], half_size);
-  for (size_t i = 0; i < half_size; ++i)
-    memcpy(c.data_[i] + half_size, c_1_2.data_[i], half_size);
-  for (size_t i = 0; i < half_size; ++i)
-    memcpy(c.data_[i + half_size], c_2_1.data_[i], half_size);
-  for (size_t i = 0; i < half_size; ++i)
-    memcpy(c.data_[i + half_size] + half_size, c_2_2.data_[i], half_size);
+
+  for (size_t i = 0; i < half_size; ++i) {
+    for (size_t j = 0; j < half_size; ++j) {
+      c.set(i, j, c_1_1.get(i, j));
+      c.set(i, j + half_size, c_1_2.get(i, j));
+      c.set(i + half_size, j, c_2_1.get(i, j));
+      c.set(i + half_size, j + half_size, c_2_2.get(i, j));
+    }
+  }
   c.resize(lhs.row_, rhs.col_);
   return c;
 }
